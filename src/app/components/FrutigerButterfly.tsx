@@ -1,28 +1,173 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { Maximize2, X, Minus } from 'lucide-react';
-import bgImage from 'figma:asset/a91df9ac6b116a5b1d098cfe4cb4c64640bb5d2e.png';
 
-const CHROME_TEXTURE_URL = "https://images.unsplash.com/photo-1759047770373-ac478dcc2d3c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsaXF1aWQlMjBjaHJvbWUlMjBtZXRhbCUyMGFic3RyYWN0JTIwdGV4dHVyZSUyMGJsdWV8ZW58MXx8fHwxNzcwNzMzMzgxfDA&ixlib=rb-4.1.0&q=80&w=1080";
-
-// Defined with coordinates roughly in -50 to +80 range
-const BUTTERFLY_PATH = new Path2D(
-  "M0 0 C10.6 -22.4 31.8 -33.6 42.4 -11.2 C53 11.2 21.2 44.8 0 22.4 C-21.2 44.8 -53 11.2 -42.4 -11.2 C-31.8 -33.6 -10.6 -22.4 0 0 Z M0 22.4 C5.3 44.8 21.2 56 31.8 78.4 C21.2 89.6 0 67.2 0 56 C0 67.2 -21.2 89.6 -31.8 78.4 C-21.2 56 -5.3 44.8 0 22.4 Z"
-);
-const PATH_SCALE = 7; 
+const BASE = import.meta.env.BASE_URL;
+const BUTTER_IMG_URL = `${BASE}butter.png`;
+const BG_IMG_URL = `${BASE}water.png`;
 
 const KEYWORDS = ['const', 'void', 'let', '0x00', '=>', 'func', 'if', 'return', 'null', 'NaN', '0', '1', 'true', 'false', 'await', 'async', 'import', 'ERROR', '404', 'sys', 'daem', 'init', 'mem'];
+
+// Frutiger Aero blue palette (back to front draw order)
+const AERO_COLORS = [
+  [88, 151, 211],   // #5897D3 - bottom layer (drawn first)
+  [86, 189, 227],   // #56BDE3 - middle layer
+  [197, 241, 253],  // #C5F1FD - top layer (drawn last)
+];
+
+const MODAL_W = 400;
+const MODAL_H = 500;
+const BUBBLE_COUNT = 15;
+
+function Bubbles() {
+  const bubbles = useMemo(() => {
+    const normal = Array.from({ length: BUBBLE_COUNT }, (_, i) => ({
+      id: i,
+      size: 30 + Math.random() * 80,
+      left: Math.random() * 100,
+      delay: Math.random() * 12,
+      duration: 12 + Math.random() * 12,
+      wobble: 20 + Math.random() * 40,
+      seed: Math.floor(Math.random() * 100),
+      distortScale: 15 + Math.random() * 20,
+      freq: (0.01 + Math.random() * 0.02).toFixed(4),
+    }));
+    // 2 extra large bubbles (2x~3x)
+    const big = Array.from({ length: 2 }, (_, i) => ({
+      id: BUBBLE_COUNT + i,
+      size: 180 + Math.random() * 100,
+      left: 15 + Math.random() * 70,
+      delay: 3 + Math.random() * 8,
+      duration: 18 + Math.random() * 10,
+      wobble: 30 + Math.random() * 50,
+      seed: Math.floor(Math.random() * 100),
+      distortScale: 25 + Math.random() * 15,
+      freq: (0.005 + Math.random() * 0.01).toFixed(4),
+    }));
+    return [...normal, ...big];
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-[1]">
+      {/* SVG distortion filters - one per bubble for variety */}
+      <svg width="0" height="0" style={{ position: 'absolute' }}>
+        <defs>
+          {bubbles.map(b => (
+            <filter key={b.id} id={`bwarp${b.id}`}>
+              <feTurbulence
+                type="fractalNoise"
+                baseFrequency={b.freq}
+                numOctaves={3}
+                seed={b.seed}
+                result="noise"
+              >
+                <animate
+                  attributeName="seed"
+                  from={b.seed}
+                  to={b.seed + 50}
+                  dur={`${b.duration * 0.8}s`}
+                  repeatCount="indefinite"
+                />
+              </feTurbulence>
+              <feDisplacementMap
+                in="SourceGraphic"
+                in2="noise"
+                scale={b.distortScale}
+                xChannelSelector="R"
+                yChannelSelector="G"
+              />
+            </filter>
+          ))}
+        </defs>
+      </svg>
+
+      {bubbles.map(b => (
+        <div
+          key={b.id}
+          className="absolute rounded-full"
+          style={{
+            width: b.size,
+            height: b.size,
+            left: `${b.left}%`,
+            bottom: -b.size - 20,
+            backdropFilter: `url(#bwarp${b.id})`,
+            WebkitBackdropFilter: `url(#bwarp${b.id})`,
+            background: `radial-gradient(ellipse at 30% 20%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 35%, transparent 65%)`,
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: `inset 0 -${b.size * 0.1}px ${b.size * 0.25}px rgba(255,255,255,0.06), inset 0 ${b.size * 0.08}px ${b.size * 0.15}px rgba(200,220,255,0.08), 0 0 ${b.size * 0.3}px rgba(255,255,255,0.03)`,
+            animation: `bubbleRise${b.id} ${b.duration}s ${b.delay}s infinite ease-in`,
+            willChange: 'transform, opacity',
+          }}
+        >
+          {/* Highlight reflection */}
+          <div
+            className="absolute rounded-full"
+            style={{
+              width: '30%',
+              height: '20%',
+              top: '12%',
+              left: '18%',
+              background: 'radial-gradient(ellipse, rgba(255,255,255,0.6) 0%, transparent 100%)',
+              transform: 'rotate(-30deg)',
+            }}
+          />
+          {/* Bottom rim light */}
+          <div
+            className="absolute rounded-full"
+            style={{
+              width: '50%',
+              height: '15%',
+              bottom: '10%',
+              left: '25%',
+              background: 'radial-gradient(ellipse, rgba(255,255,255,0.15) 0%, transparent 100%)',
+            }}
+          />
+        </div>
+      ))}
+      <style>{bubbles.map(b => `
+        @keyframes bubbleRise${b.id} {
+          0% {
+            transform: translateY(0) translateX(0) scale(0.8);
+            opacity: 0;
+          }
+          5% {
+            opacity: 1;
+            transform: translateY(-5vh) translateX(0) scale(1);
+          }
+          25% {
+            transform: translateY(-30vh) translateX(${b.wobble}px) scale(0.97);
+          }
+          50% {
+            opacity: 0.8;
+            transform: translateY(-60vh) translateX(-${b.wobble * 0.6}px) scale(0.93);
+          }
+          75% {
+            transform: translateY(-90vh) translateX(${b.wobble * 0.3}px) scale(0.85);
+          }
+          100% {
+            transform: translateY(-120vh) translateX(-${b.wobble * 0.2}px) scale(0.7);
+            opacity: 0;
+          }
+        }
+      `).join('')}</style>
+    </div>
+  );
+}
 
 interface MeltDrop { x: number; y: number; speed: number; life: number; width: number; }
 
 interface CodeParticle {
   id: number;
+  relX: number;
+  relY: number;
   x: number;
   y: number;
   vx: number;
   vy: number;
   text: string;
   size: number;
+  baseSize: number;
   alpha: number;
+  colorIdx: number;
   isBroken: boolean;
   rotation?: number;
 }
@@ -37,214 +182,243 @@ export default function FrutigerButterfly() {
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Canvas Refs
-  const metalCanvasRef = useRef<HTMLCanvasElement>(null);
+  const imgCanvasRef = useRef<HTMLCanvasElement>(null);
   const codeCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Assets
-  const [chromeImg, setChromeImg] = useState<HTMLImageElement | null>(null);
+  const [butterImg, setButterImg] = useState<HTMLImageElement | null>(null);
 
   // Physics State
   const dropsRef = useRef<MeltDrop[]>([]);
   const particlesRef = useRef<CodeParticle[]>([]);
   const requestRef = useRef<number>();
 
+  // Audio
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioStartedRef = useRef(false);
+
   // Load Assets
   useEffect(() => {
     const img = new Image();
-    img.src = CHROME_TEXTURE_URL;
-    img.crossOrigin = "Anonymous";
-    img.onload = () => setChromeImg(img);
+    img.src = BUTTER_IMG_URL;
+    img.onload = () => setButterImg(img);
+
+    // Setup background music
+    const audio = new Audio(`${BASE}frutiger_aero.mp3`);
+    audio.loop = true;
+    audio.volume = 0.4;
+    audioRef.current = audio;
+
+    const startAudio = () => {
+      if (audioStartedRef.current) return;
+      audioStartedRef.current = true;
+      audio.play().catch(() => {});
+    };
+    document.addEventListener('click', startAudio, { once: true });
+    document.addEventListener('touchstart', startAudio, { once: true });
 
     const handleResize = () => setDimensions({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('click', startAudio);
+      document.removeEventListener('touchstart', startAudio);
+      audio.pause();
+    };
   }, []);
 
-  // --- Initialization: Generate Code Particles ---
+  // Helper: compute draw rect for butter image
+  const getImageRect = (img: HTMLImageElement, w: number, h: number) => {
+    const maxW = w * 0.6;
+    const maxH = h * 0.6;
+    const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+    const drawW = img.width * scale;
+    const drawH = img.height * scale;
+    const drawX = (w - drawW) / 2;
+    const drawY = (h - drawH) / 2 - h * 0.05;
+    return { drawX, drawY, drawW, drawH, scale };
+  };
+
+  // --- Generate Code Particles from butter.png alpha ---
   useEffect(() => {
-    if (dimensions.width === 0) return;
-    
-    // Create offscreen canvas to check path
+    if (!butterImg) return;
+
+    // Use the image's native pixels directly for accurate sampling
+    const sampW = Math.min(butterImg.width, 400);
+    const sampH = Math.round(sampW * (butterImg.height / butterImg.width));
     const offCanvas = document.createElement('canvas');
-    offCanvas.width = 100; // Small scratchpad
-    offCanvas.height = 100;
+    offCanvas.width = sampW;
+    offCanvas.height = sampH;
     const ctx = offCanvas.getContext('2d');
-    if(!ctx) return;
-    
+    if (!ctx) return;
+
+    ctx.drawImage(butterImg, 0, 0, sampW, sampH);
+    const imageData = ctx.getImageData(0, 0, sampW, sampH);
+    const pixels = imageData.data;
+
     const particles: CodeParticle[] = [];
-    const count = 1200; 
-    
-    for(let i=0; i<count; i++) {
-        // Random point in local coordinate space covering the path bounding box
-        const lx = (Math.random() - 0.5) * 110; 
-        const ly = (Math.random() - 0.4) * 140; 
-        
-        if (ctx.isPointInPath(BUTTERFLY_PATH, lx, ly)) {
-            // Convert to World Space
-            const worldX = lx * PATH_SCALE + dimensions.width / 2;
-            const worldY = ly * PATH_SCALE + dimensions.height / 2;
-            
+    const targetCount = 800;
+    let attempts = 0;
+    const maxAttempts = targetCount * 10;
+
+    while (particles.length < targetCount && attempts < maxAttempts) {
+        attempts++;
+        const px = Math.floor(Math.random() * sampW);
+        const py = Math.floor(Math.random() * sampH);
+        const idx = (py * sampW + px) * 4;
+        const alpha = pixels[idx + 3];
+
+        if (alpha > 30) {
+            const relX = px / sampW;
+            const relY = py / sampH;
+
+            const baseSize = 8 + Math.random() * 8;
             particles.push({
-                id: i,
-                x: worldX,
-                y: worldY,
-                vx: 0,
-                vy: 0,
+                id: particles.length,
+                relX,
+                relY,
+                x: 0, y: 0,
+                vx: 0, vy: 0,
                 text: KEYWORDS[Math.floor(Math.random() * KEYWORDS.length)],
-                size: 8 + Math.random() * 8, 
+                size: baseSize,
+                baseSize,
                 alpha: 0.6 + Math.random() * 0.4,
+                colorIdx: Math.floor(Math.random() * AERO_COLORS.length),
                 isBroken: false
             });
         }
     }
-    
-    // Fallback
-    if (particles.length < 10) {
-        for(let i=0; i<300; i++) {
-            particles.push({
-                id: i + 9999,
-                x: dimensions.width/2 + (Math.random() - 0.5) * 400,
-                y: dimensions.height/2 + (Math.random() - 0.5) * 400,
-                vx: 0, vy: 0,
-                text: "ERROR",
-                size: 12, alpha: 1, isBroken: false
-            });
-        }
-    }
 
+    // Sort by layer: 0 (back) drawn first, 2 (front) drawn last
+    particles.sort((a, b) => a.colorIdx - b.colorIdx);
     particlesRef.current = particles;
-    
-  }, [dimensions]);
+  }, [butterImg]);
 
-  // --- Rendering Logic ---
-
-  // 1. Render Metallic Butterfly (Base Layer)
+  // --- Reposition particles + clamp modal when dimensions change ---
   useEffect(() => {
-    const canvas = metalCanvasRef.current;
-    if (!canvas || !chromeImg) return;
+    if (!butterImg || dimensions.width === 0) return;
+    const { drawX, drawY, drawW, drawH } = getImageRect(butterImg, dimensions.width, dimensions.height);
+
+    particlesRef.current.forEach(p => {
+        if (p.isBroken) return;
+        p.x = drawX + p.relX * drawW;
+        p.y = drawY + p.relY * drawH - 36;
+    });
+
+    // Clamp modal so it stays visible
+    setModalPos(prev => ({
+        x: Math.min(prev.x, dimensions.width - 60),
+        y: Math.min(prev.y, dimensions.height - 60)
+    }));
+  }, [dimensions, butterImg]);
+
+  // --- Draw butter.png as original image centered on canvas ---
+  useEffect(() => {
+    const canvas = imgCanvasRef.current;
+    if (!canvas || !butterImg) return;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    drawMetallicState(ctx, dimensions.width, dimensions.height);
+    drawButterImage(ctx, dimensions.width, dimensions.height);
+  }, [butterImg, dimensions]);
 
-  }, [chromeImg, dimensions]);
+  const drawButterImage = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    if (!butterImg) return;
 
-  const drawMetallicState = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    if (!chromeImg) return;
-    
     ctx.clearRect(0, 0, w, h);
-    ctx.save();
-    
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(PATH_SCALE, PATH_SCALE);
-    
-    // Enhanced Chrome Effect
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-    ctx.shadowBlur = 30;
-    ctx.shadowOffsetX = 15;
-    ctx.shadowOffsetY = 15;
-    
-    const pattern = ctx.createPattern(chromeImg, 'repeat');
-    if (pattern) {
-        const matrix = new DOMMatrix();
-        pattern.setTransform(matrix.scale(0.5)); 
-        ctx.fillStyle = pattern;
-    } else {
-        ctx.fillStyle = '#aaa';
-    }
-    
-    ctx.fill(BUTTERFLY_PATH);
-    
-    // Shiny Bevels
-    ctx.shadowColor = 'transparent';
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.lineWidth = 0.5;
-    ctx.stroke(BUTTERFLY_PATH);
 
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.lineWidth = 0.1;
-    ctx.stroke(BUTTERFLY_PATH);
-
-    ctx.restore();
+    const { drawX, drawY, drawW, drawH } = getImageRect(butterImg, w, h);
+    ctx.drawImage(butterImg, drawX, drawY, drawW, drawH);
   };
 
-
-  // 2. Animation Loop (Melting & Code Particles)
+  // --- Animation Loop (Melting & Code Particles) ---
   useEffect(() => {
-    const metalCanvas = metalCanvasRef.current;
+    const imgCanvas = imgCanvasRef.current;
     const codeCanvas = codeCanvasRef.current;
-    
-    if (!metalCanvas || !codeCanvas) return;
-    const mCtx = metalCanvas.getContext('2d', { willReadFrequently: true });
+
+    if (!imgCanvas || !codeCanvas) return;
+    const mCtx = imgCanvas.getContext('2d', { willReadFrequently: true });
     const cCtx = codeCanvas.getContext('2d');
-    
+
     if (!mCtx || !cCtx) return;
 
     const loop = () => {
-        // --- Metal Melting Logic ---
+        // --- Image Melting Logic ---
         if (dropsRef.current.length > 0) {
             dropsRef.current.forEach(drop => {
                 if (drop.life <= 0) return;
-                
-                const sx = drop.x - drop.width/2;
-                const sy = drop.y;
-                const sw = drop.width;
-                const sh = drop.speed * 2.5; 
-                
+
+                const sx = Math.max(0, drop.x - drop.width/2);
+                const sy = Math.max(0, drop.y);
+                const sw = Math.min(drop.width, imgCanvas.width - sx);
+                const sh = Math.min(drop.speed * 2.5, imgCanvas.height - sy);
+
+                if (sw <= 0 || sh <= 0) return;
+
                 try {
                     const imageData = mCtx.getImageData(sx, sy, sw, sh);
                     mCtx.putImageData(imageData, sx + (Math.random()-0.5)*2, sy + drop.speed);
-                    
+
                     drop.y += drop.speed;
                     drop.life -= 0.015;
-                    drop.speed *= 0.99; 
+                    drop.speed *= 0.99;
                 } catch (e) { }
             });
             dropsRef.current = dropsRef.current.filter(d => d.life > 0);
         }
 
         // --- Code Particle Logic ---
-        cCtx.clearRect(0, 0, dimensions.width, dimensions.height);
-        
+        const w = codeCanvas.width;
+        const h = codeCanvas.height;
+        cCtx.clearRect(0, 0, w, h);
+
         cCtx.textAlign = 'center';
         cCtx.textBaseline = 'middle';
 
-        particlesRef.current.forEach(p => {
+        const alive = particlesRef.current;
+        for (let i = alive.length - 1; i >= 0; i--) {
+            const p = alive[i];
+
             if (p.isBroken) {
-                p.vy += 0.4; // Gravity
-                p.vx *= 0.95; // Drag
+                p.vy += 0.4;
+                p.vx *= 0.95;
                 p.x += p.vx;
                 p.y += p.vy;
                 p.alpha -= 0.015;
                 p.rotation = (p.rotation || 0) + 0.1;
+
+                // Remove dead particles to prevent buildup
+                if (p.alpha <= 0 || p.y > h + 100) {
+                    alive.splice(i, 1);
+                    continue;
+                }
             }
 
-            if (p.alpha <= 0) return;
+            if (p.alpha <= 0) continue;
 
             cCtx.save();
             cCtx.translate(p.x, p.y);
-            if(p.isBroken) cCtx.rotate(p.rotation || 0);
-            
-            // Aesthetic: Code Text
+            if (p.isBroken) cCtx.rotate(p.rotation || 0);
+
             if (p.isBroken) {
-                cCtx.fillStyle = `rgba(255, 50, 50, ${p.alpha})`; // Red error
-                cCtx.shadowColor = 'red';
-                cCtx.shadowBlur = 5;
+                cCtx.fillStyle = `rgba(255, 255, 255, ${p.alpha})`;
+                cCtx.shadowColor = `rgba(255, 255, 255, 0.3)`;
+                cCtx.shadowBlur = 4;
             } else {
-                // Modified for transparency visibility: White/Mint with slight shadow
-                cCtx.fillStyle = `rgba(220, 255, 230, ${p.alpha})`; 
-                cCtx.shadowColor = 'rgba(0,0,0,0.5)'; // Add shadow for legibility on transparent bg
-                cCtx.shadowBlur = 2;
+                const [cr, cg, cb] = AERO_COLORS[p.colorIdx] || AERO_COLORS[0];
+                cCtx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${p.alpha})`;
+                cCtx.shadowColor = `rgba(${cr}, ${cg}, ${cb}, 0.3)`;
+                cCtx.shadowBlur = 3;
             }
-            
+
             cCtx.font = `bold ${p.size}px monospace`;
             cCtx.fillText(p.text, 0, 0);
             cCtx.restore();
-        });
+        }
 
         requestRef.current = requestAnimationFrame(loop);
     };
-    
+
     loop();
     return () => {
         if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -261,7 +435,7 @@ export default function FrutigerButterfly() {
     setIsDragging(true);
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
-    
+
     dragStart.current = {
         x: clientX - modalPos.x,
         y: clientY - modalPos.y
@@ -270,14 +444,14 @@ export default function FrutigerButterfly() {
 
   const handleDragMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (!isDragging) return;
-    e.preventDefault(); 
-    
+    e.preventDefault();
+
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
 
     setModalPos({
-        x: clientX - dragStart.current.x,
-        y: clientY - dragStart.current.y
+        x: Math.max(-MODAL_W + 60, Math.min(clientX - dragStart.current.x, dimensions.width - 60)),
+        y: Math.max(0, Math.min(clientY - dragStart.current.y, dimensions.height - 60))
     });
   };
 
@@ -288,18 +462,18 @@ export default function FrutigerButterfly() {
   const handleCodeClick = (e: React.MouseEvent) => {
       const clientX = e.clientX;
       const clientY = e.clientY;
-      
+
       let hitCount = 0;
-      const hitRadius = 80; 
-      
+      const hitRadius = 80;
+
       particlesRef.current.forEach(p => {
           if (p.isBroken) return;
           const dx = p.x - clientX;
           const dy = p.y - clientY;
           if (dx*dx + dy*dy < hitRadius*hitRadius) {
               p.isBroken = true;
-              p.vx = (Math.random() - 0.5) * 15; 
-              p.vy = (Math.random() - 1.0) * 10; 
+              p.vx = (Math.random() - 0.5) * 15;
+              p.vy = (Math.random() - 1.0) * 10;
               p.rotation = Math.random();
               hitCount++;
           }
@@ -319,36 +493,37 @@ export default function FrutigerButterfly() {
   };
 
   return (
-    <div 
+    <div
         className="relative w-full h-full overflow-hidden select-none font-sans"
         onMouseMove={handleDragMove}
         onTouchMove={handleDragMove}
         onMouseUp={handleDragEnd}
         onTouchEnd={handleDragEnd}
         style={{
-            background: `url(${bgImage}) center/cover no-repeat`,
+            background: `url(${BG_IMG_URL}) center/cover no-repeat black`,
         }}
     >
-        <div className="absolute inset-0 bg-gradient-to-b from-blue-400/20 via-white/10 to-blue-900/40 pointer-events-none" />
+        {/* Bubble Overlay */}
+        <Bubbles />
 
-        {/* Layer 1: Metallic Butterfly (Distortable) */}
-        <canvas 
-            ref={metalCanvasRef}
+        {/* Layer 1: Butter Image (Distortable/Meltable) */}
+        <canvas
+            ref={imgCanvasRef}
             width={dimensions.width}
             height={dimensions.height}
             className="absolute inset-0 pointer-events-none block"
         />
-        
+
         {/* Layer 2: Draggable Frutiger Window */}
-        <div 
+        <div
             ref={modalRef}
             className="absolute shadow-[0_20px_50px_rgba(0,0,0,0.5)] backdrop-blur-md rounded-lg overflow-hidden flex flex-col border border-white/50"
             style={{
                 left: modalPos.x,
                 top: modalPos.y,
-                width: 400,
-                height: 500,
-                backgroundColor: 'rgba(255, 255, 255, 0.15)', // RESTORED GLASSY LOOK
+                width: MODAL_W,
+                height: MODAL_H,
+                backgroundColor: 'rgba(255, 255, 255, 0.15)',
                 boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4), 0 10px 40px rgba(0,0,0,0.2)'
             }}
             onMouseDown={handleDragStart}
@@ -368,11 +543,6 @@ export default function FrutigerButterfly() {
 
             {/* Window Content (The Lens) */}
             <div className="relative flex-1 w-full h-full overflow-hidden bg-white/5 cursor-crosshair">
-                {/* Subtle Grid overlay */}
-                <div className="absolute inset-0 pointer-events-none z-10 opacity-10" 
-                     style={{backgroundImage: 'linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)', backgroundSize: '20px 20px'}}>
-                </div>
-                
                 {/* Code Butterfly Canvas */}
                 <canvas
                     ref={codeCanvasRef}
@@ -380,12 +550,12 @@ export default function FrutigerButterfly() {
                     height={dimensions.height}
                     className="absolute block"
                     style={{
-                        transform: `translate(${-modalPos.x}px, ${-modalPos.y + 36}px)`, 
-                        pointerEvents: 'auto' 
+                        transform: `translate(${-modalPos.x}px, ${-modalPos.y + 36}px)`,
+                        pointerEvents: 'auto'
                     }}
                     onClick={handleCodeClick}
                 />
-                
+
                 <div className="absolute bottom-2 right-2 text-[10px] text-white/80 font-mono opacity-80 pointer-events-none z-20 drop-shadow-md">
                     STATUS: LIVE FEED [CONNECTED]
                     <br/>
